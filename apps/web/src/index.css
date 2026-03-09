@@ -433,3 +433,29 @@ label:has(> select#reasoning-effort) select {
   overflow: clip;
   background: color-mix(in srgb, var(--card) 92%, var(--background));
 }
+
+@keyframes composer-working-status-shine {
+  0% {
+    background-position: 140% 50%;
+  }
+  100% {
+    background-position: -40% 50%;
+  }
+}
+
+.composer-working-status-label {
+  color: transparent;
+  background-image: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--primary) 62%, white 38%) 0%,
+    color-mix(in srgb, var(--primary) 84%, white 16%) 38%,
+    color-mix(in srgb, white 70%, var(--primary) 30%) 50%,
+    color-mix(in srgb, var(--primary) 84%, white 16%) 62%,
+    color-mix(in srgb, var(--primary) 62%, white 38%) 100%
+  );
+  background-size: 220% 100%;
+  background-position: 140% 50%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  animation: composer-working-status-shine 2.8s linear infinite;
+}
