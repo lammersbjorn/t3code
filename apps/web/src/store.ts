@@ -175,6 +175,8 @@ function toLegacySessionStatus(
   switch (status) {
     case "starting":
       return "connecting";
+    case "idle":
+      return "ready";
     case "running":
       return "running";
     case "error":
@@ -182,7 +184,6 @@ function toLegacySessionStatus(
     case "ready":
     case "interrupted":
       return "ready";
-    case "idle":
     case "stopped":
       return "closed";
   }

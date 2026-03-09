@@ -10,6 +10,7 @@ import {
   deriveTimelineEntries,
   deriveWorkLogEntries,
   findLatestProposedPlan,
+  hasActiveRuntimeActivityForTurn,
   hasToolActivityForTurn,
   isLatestTurnSettled,
 } from "./session-logic";
@@ -540,6 +541,51 @@ describe("hasToolActivityForTurn", () => {
 
     expect(hasToolActivityForTurn(activities, TurnId.makeUnsafe("turn-1"))).toBe(true);
     expect(hasToolActivityForTurn(activities, TurnId.makeUnsafe("turn-2"))).toBe(false);
+  });
+});
+
+describe("hasActiveRuntimeActivityForTurn", () => {
+  it("returns true when a tool has started without a matching completion", () => {
+    const activities: OrchestrationThreadActivity[] = [
+      makeActivity({ id: "tool-1", turnId: "turn-1", kind: "tool.started", tone: "tool" }),
+    ];
+
+    expect(hasActiveRuntimeActivityForTurn(activities, TurnId.makeUnsafe("turn-1"))).toBe(true);
+  });
+
+  it("returns false once matching tool activity has completed", () => {
+    const activities: OrchestrationThreadActivity[] = [
+      makeActivity({ id: "tool-1", turnId: "turn-1", kind: "tool.started", tone: "tool" }),
+      makeActivity({ id: "tool-2", turnId: "turn-1", kind: "tool.completed", tone: "tool" }),
+    ];
+
+    expect(hasActiveRuntimeActivityForTurn(activities, TurnId.makeUnsafe("turn-1"))).toBe(false);
+  });
+
+  it("treats approval and user-input waits as active runtime work", () => {
+    const approvalActivities: OrchestrationThreadActivity[] = [
+      makeActivity({
+        id: "approval-1",
+        turnId: "turn-1",
+        kind: "approval.requested",
+        tone: "approval",
+      }),
+    ];
+    const userInputActivities: OrchestrationThreadActivity[] = [
+      makeActivity({
+        id: "user-input-1",
+        turnId: "turn-1",
+        kind: "user-input.requested",
+        tone: "approval",
+      }),
+    ];
+
+    expect(hasActiveRuntimeActivityForTurn(approvalActivities, TurnId.makeUnsafe("turn-1"))).toBe(
+      true,
+    );
+    expect(hasActiveRuntimeActivityForTurn(userInputActivities, TurnId.makeUnsafe("turn-1"))).toBe(
+      true,
+    );
   });
 });
 

@@ -257,4 +257,26 @@ describe("store read model sync", () => {
 
     expect(next.projects.map((project) => project.id)).toEqual([project2, project1, project3]);
   });
+
+  it("keeps idle orchestration sessions interactive instead of marking them disconnected", () => {
+    const initialState = makeState(makeThread());
+    const readModel = makeReadModel(
+      makeReadModelThread({
+        session: {
+          threadId: ThreadId.makeUnsafe("thread-1"),
+          status: "idle",
+          providerName: "codex",
+          runtimeMode: DEFAULT_RUNTIME_MODE,
+          activeTurnId: null,
+          updatedAt: "2026-02-27T00:00:00.000Z",
+          lastError: null,
+        },
+      }),
+    );
+
+    const next = syncServerReadModel(initialState, readModel);
+
+    expect(next.threads[0]?.session?.orchestrationStatus).toBe("idle");
+    expect(next.threads[0]?.session?.status).toBe("ready");
+  });
 });
