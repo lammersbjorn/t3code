@@ -70,6 +70,7 @@ import {
   deriveActiveWorkStartedAt,
   deriveActivePlanState,
   findLatestProposedPlan,
+  hasActiveRuntimeActivityForTurn,
   type PendingApproval,
   type PendingUserInput,
   type ProviderPickerKind,
@@ -257,6 +258,9 @@ const MAX_VISIBLE_WORK_LOG_ENTRIES = 6;
 const ALWAYS_UNVIRTUALIZED_TAIL_ROWS = 8;
 const ATTACHMENT_PREVIEW_HANDOFF_TTL_MS = 5000;
 const IMAGE_SIZE_LIMIT_LABEL = `${Math.round(PROVIDER_SEND_TURN_MAX_IMAGE_BYTES / (1024 * 1024))}MB`;
+const CLAUDE_SPINNER_FRAMES = ["·", "✻", "✽", "✶", "✳", "✢"] as const;
+const CLAUDE_SPINNER_FRAME_DELAYS_MS = [360, 150, 150, 150, 150, 360] as const;
+const CLAUDE_SPINNER_FRAME_OFFSETS_PX = [0, -0.25, -0.5, -0.25, 0.25, 0] as const;
 const IMAGE_ONLY_BOOTSTRAP_PROMPT =
   "[User attached one or more images without additional text. Respond using the conversation context and the attached image(s).]";
 const EMPTY_ACTIVITIES: OrchestrationThreadActivity[] = [];
@@ -880,6 +884,10 @@ export default function ChatView({ threadId }: ChatViewProps) {
     () => hasToolActivityForTurn(threadActivities, activeLatestTurn?.turnId),
     [activeLatestTurn?.turnId, threadActivities],
   );
+  const latestTurnHasLiveRuntimeActivity = useMemo(
+    () => hasActiveRuntimeActivityForTurn(threadActivities, activeLatestTurn?.turnId),
+    [activeLatestTurn?.turnId, threadActivities],
+  );
   const pendingApprovals = useMemo(
     () => derivePendingApprovals(threadActivities),
     [threadActivities],
@@ -1084,6 +1092,15 @@ export default function ChatView({ threadId }: ChatViewProps) {
       deriveTimelineEntries(timelineMessages, activeThread?.proposedPlans ?? [], workLogEntries),
     [activeThread?.proposedPlans, timelineMessages, workLogEntries],
   );
+  const hasStreamingAssistantMessage = useMemo(
+    () => timelineMessages.some((message) => message.role === "assistant" && message.streaming),
+    [timelineMessages],
+  );
+  const activeTurnInProgress =
+    isWorking ||
+    !latestTurnSettled ||
+    hasStreamingAssistantMessage ||
+    latestTurnHasLiveRuntimeActivity;
   const { turnDiffSummaries, inferredCheckpointTurnCountByTurnId } =
     useTurnDiffSummaries(activeThread);
   const turnDiffSummaryByAssistantMessageId = useMemo(() => {
@@ -1926,10 +1943,10 @@ export default function ChatView({ threadId }: ChatViewProps) {
     scheduleStickToBottom();
   }, [messageCount, scheduleStickToBottom]);
   useEffect(() => {
-    if (phase !== "running") return;
+    if (!activeTurnInProgress) return;
     if (!shouldAutoScrollRef.current) return;
     scheduleStickToBottom();
-  }, [phase, scheduleStickToBottom, timelineEntries]);
+  }, [activeTurnInProgress, scheduleStickToBottom, timelineEntries]);
 
   useEffect(() => {
     setExpandedWorkGroups({});
@@ -2146,14 +2163,14 @@ export default function ChatView({ threadId }: ChatViewProps) {
       : "local";
 
   useEffect(() => {
-    if (phase !== "running") return;
+    if (!activeTurnInProgress) return;
     const timer = window.setInterval(() => {
       setNowTick(Date.now());
     }, 1000);
     return () => {
       window.clearInterval(timer);
     };
-  }, [phase]);
+  }, [activeTurnInProgress]);
 
   const beginSendPhase = useCallback((nextPhase: Exclude<SendPhase, "idle">) => {
     setSendStartedAt((current) => current ?? new Date().toISOString());
@@ -2170,7 +2187,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
       return;
     }
     if (
-      phase === "running" ||
+      activeTurnInProgress ||
       activePendingApproval !== null ||
       activePendingUserInput !== null ||
       activeThread?.error
@@ -2181,7 +2198,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
     activePendingApproval,
     activePendingUserInput,
     activeThread?.error,
-    phase,
+    activeTurnInProgress,
     resetSendPhase,
     sendPhase,
   ]);
@@ -2401,7 +2418,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
       const api = readNativeApi();
       if (!api || !activeThread || isRevertingCheckpoint) return;
 
-      if (phase === "running" || isSendBusy || isConnecting) {
+      if (activeTurnInProgress || isSendBusy || isConnecting) {
         setThreadError(activeThread.id, "Interrupt the current turn before reverting checkpoints.");
         return;
       }
@@ -2434,7 +2451,14 @@ export default function ChatView({ threadId }: ChatViewProps) {
       }
       setIsRevertingCheckpoint(false);
     },
-    [activeThread, isConnecting, isRevertingCheckpoint, isSendBusy, phase, setThreadError],
+    [
+      activeThread,
+      activeTurnInProgress,
+      isConnecting,
+      isRevertingCheckpoint,
+      isSendBusy,
+      setThreadError,
+    ],
   );
 
   const onSend = async (e?: { preventDefault: () => void }) => {
@@ -3420,13 +3444,13 @@ export default function ChatView({ threadId }: ChatViewProps) {
         {!isElectron && (
           <header className="border-b border-border px-3 py-2 md:hidden">
             <div className="flex items-center gap-2">
-              <SidebarTrigger className="size-7 shrink-0" />
+              <SidebarTrigger className="shrink-0" />
               <span className="text-sm font-medium text-foreground">Threads</span>
             </div>
           </header>
         )}
         {isElectron && (
-          <div className="drag-region flex h-[52px] shrink-0 items-center border-b border-border px-5">
+          <div className="drag-region flex h-12 shrink-0 items-center border-b border-border px-5">
             <span className="text-xs text-muted-foreground/50">No active thread</span>
           </div>
         )}
@@ -3445,7 +3469,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
       <header
         className={cn(
           "border-b border-border px-3 sm:px-5",
-          isElectron ? "drag-region flex h-[52px] items-center" : "py-2 sm:py-3",
+          isElectron ? "drag-region flex h-12 items-center" : "py-2 sm:py-3",
         )}
       >
         <ChatHeader
@@ -3503,7 +3527,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
           key={activeThread.id}
           hasMessages={timelineEntries.length > 0}
           isWorking={isWorking}
-          activeTurnInProgress={isWorking || !latestTurnSettled}
+          activeTurnInProgress={activeTurnInProgress}
           activeTurnStartedAt={activeWorkStartedAt}
           scrollContainer={messagesScrollElement}
           timelineEntries={timelineEntries}
@@ -3526,6 +3550,9 @@ export default function ChatView({ threadId }: ChatViewProps) {
 
       {/* Input bar */}
       <div className={cn("px-3 pt-1.5 sm:px-5 sm:pt-2", isGitRepo ? "pb-1" : "pb-3 sm:pb-4")}>
+        {activeTurnInProgress ? (
+          <ComposerWorkingStatus activeTurnStartedAt={activeWorkStartedAt} nowIso={nowIso} />
+        ) : null}
         <form
           ref={composerFormRef}
           onSubmit={onSend}
@@ -3533,7 +3560,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
           data-chat-composer-form="true"
         >
           <div
-            className={`group rounded-[20px] border bg-card transition-colors duration-200 focus-within:border-ring/45 ${
+            className={`group rounded-xl border bg-card transition-colors duration-200 focus-within:border-ring/45 ${
               isDragOverComposer ? "border-primary/70 bg-accent/30" : "border-border"
             }`}
             onDragEnter={onComposerDragEnter}
@@ -3542,14 +3569,14 @@ export default function ChatView({ threadId }: ChatViewProps) {
             onDrop={onComposerDrop}
           >
             {activePendingApproval ? (
-              <div className="rounded-t-[19px] border-b border-border/65 bg-muted/20">
+              <div className="rounded-t-xl border-b border-border/65 bg-muted/20">
                 <ComposerPendingApprovalPanel
                   approval={activePendingApproval}
                   pendingCount={pendingApprovals.length}
                 />
               </div>
             ) : pendingUserInputs.length > 0 ? (
-              <div className="rounded-t-[19px] border-b border-border/65 bg-muted/20">
+              <div className="rounded-t-xl border-b border-border/65 bg-muted/20">
                 <ComposerPendingUserInputPanel
                   pendingUserInputs={pendingUserInputs}
                   respondingRequestIds={respondingUserInputRequestIds}
@@ -3560,7 +3587,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
                 />
               </div>
             ) : showPlanFollowUpPrompt && activeProposedPlan ? (
-              <div className="rounded-t-[19px] border-b border-border/65 bg-muted/20">
+              <div className="rounded-t-xl border-b border-border/65 bg-muted/20">
                 <ComposerPlanFollowUpBanner
                   key={activeProposedPlan.id}
                   planTitle={proposedPlanTitle(activeProposedPlan.planMarkdown) ?? null}
@@ -3642,7 +3669,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
                       )}
                       <Button
                         variant="ghost"
-                        size="icon-xs"
+                        size="icon-sm"
                         className="absolute right-1 top-1 bg-background/80 hover:bg-background/90"
                         onClick={() => removeComposerImage(image.id)}
                         aria-label={`Remove ${image.name}`}
@@ -3813,7 +3840,6 @@ export default function ChatView({ threadId }: ChatViewProps) {
                         <Button
                           size="sm"
                           variant="outline"
-                          className="rounded-full"
                           onClick={onPreviousActivePendingUserInputQuestion}
                           disabled={activePendingIsResponding}
                         >
@@ -3823,7 +3849,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
                       <Button
                         type="submit"
                         size="sm"
-                        className="rounded-full px-4"
+                        className="px-4"
                         disabled={
                           activePendingIsResponding ||
                           (activePendingProgress.isLastQuestion
@@ -3838,10 +3864,12 @@ export default function ChatView({ threadId }: ChatViewProps) {
                             : "Next question"}
                       </Button>
                     </div>
-                  ) : phase === "running" ? (
-                    <button
+                  ) : activeTurnInProgress ? (
+                    <Button
                       type="button"
-                      className="flex size-8 items-center justify-center rounded-full bg-rose-500/90 text-white transition-all duration-150 hover:bg-rose-500 hover:scale-105 sm:h-8 sm:w-8"
+                      size="icon-sm"
+                      variant="destructive"
+                      className="px-0"
                       onClick={() => void onInterrupt()}
                       aria-label="Stop generation"
                     >
@@ -3854,14 +3882,14 @@ export default function ChatView({ threadId }: ChatViewProps) {
                       >
                         <rect x="2" y="2" width="8" height="8" rx="1.5" />
                       </svg>
-                    </button>
+                    </Button>
                   ) : pendingUserInputs.length === 0 ? (
                     showPlanFollowUpPrompt ? (
                       prompt.trim().length > 0 ? (
                         <Button
                           type="submit"
                           size="sm"
-                          className="h-9 rounded-full px-4 sm:h-8"
+                          className="px-4"
                           disabled={isSendBusy || isConnecting}
                         >
                           {isConnecting || isSendBusy ? "Sending..." : "Refine"}
@@ -3871,7 +3899,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
                           <Button
                             type="submit"
                             size="sm"
-                            className="h-9 rounded-l-full rounded-r-none px-4 sm:h-8"
+                            className="rounded-r-none px-4"
                             disabled={isSendBusy || isConnecting}
                           >
                             {isConnecting || isSendBusy ? "Sending..." : "Implement"}
@@ -3882,7 +3910,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
                                 <Button
                                   size="sm"
                                   variant="default"
-                                  className="h-9 rounded-l-none rounded-r-full border-l-white/12 px-2 sm:h-8"
+                                  className="rounded-l-none border-l-white/12 px-2"
                                   aria-label="Implementation actions"
                                   disabled={isSendBusy || isConnecting}
                                 />
@@ -3902,9 +3930,10 @@ export default function ChatView({ threadId }: ChatViewProps) {
                         </div>
                       )
                     ) : (
-                      <button
+                      <Button
                         type="submit"
-                        className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/90 text-primary-foreground transition-all duration-150 hover:bg-primary hover:scale-105 disabled:opacity-30 disabled:hover:scale-100 sm:h-8 sm:w-8"
+                        size="icon-sm"
+                        className="px-0"
                         disabled={
                           isSendBusy ||
                           isConnecting ||
@@ -3956,7 +3985,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
                             />
                           </svg>
                         )}
-                      </button>
+                      </Button>
                     )
                   ) : null}
                 </div>
@@ -4137,7 +4166,7 @@ const ChatHeader = memo(function ChatHeader({
   return (
     <div className="flex min-w-0 flex-1 items-center gap-2">
       <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden sm:gap-3">
-        <SidebarTrigger className="size-7 shrink-0 md:hidden" />
+        <SidebarTrigger className="shrink-0 md:hidden" />
         <h2
           className="min-w-0 shrink truncate text-sm font-medium text-foreground"
           title={activeThreadTitle}
@@ -4174,31 +4203,37 @@ const ChatHeader = memo(function ChatHeader({
             openInCwd={openInCwd}
           />
         )}
-        {activeProjectName && <GitActionsControl gitCwd={gitCwd} activeThreadId={activeThreadId} />}
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Toggle
-                className="shrink-0"
-                pressed={diffOpen}
-                onPressedChange={onToggleDiff}
-                aria-label="Toggle diff panel"
-                variant="outline"
-                size="xs"
-                disabled={!isGitRepo}
-              >
-                <DiffIcon className="size-3" />
-              </Toggle>
-            }
-          />
-          <TooltipPopup side="bottom">
-            {!isGitRepo
-              ? "Diff panel is unavailable because this project is not a git repository."
-              : diffToggleShortcutLabel
-                ? `Toggle diff panel (${diffToggleShortcutLabel})`
-                : "Toggle diff panel"}
-          </TooltipPopup>
-        </Tooltip>
+        {(activeProjectName || isGitRepo) && (
+          <div className="flex shrink-0 items-center gap-2">
+            {activeProjectName && (
+              <GitActionsControl gitCwd={gitCwd} activeThreadId={activeThreadId} />
+            )}
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Toggle
+                    className="shrink-0"
+                    pressed={diffOpen}
+                    onPressedChange={onToggleDiff}
+                    aria-label="Toggle diff panel"
+                    variant="outline"
+                    size="sm"
+                    disabled={!isGitRepo}
+                  >
+                    <DiffIcon className="size-3" />
+                  </Toggle>
+                }
+              />
+              <TooltipPopup side="bottom">
+                {!isGitRepo
+                  ? "Diff panel is unavailable because this project is not a git repository."
+                  : diffToggleShortcutLabel
+                    ? `Toggle diff panel (${diffToggleShortcutLabel})`
+                    : "Toggle diff panel"}
+              </TooltipPopup>
+            </Tooltip>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -4878,6 +4913,68 @@ const ProposedPlanCard = memo(function ProposedPlanCard({
   );
 });
 
+const ComposerWorkingStatus = memo(function ComposerWorkingStatus({
+  activeTurnStartedAt,
+  nowIso,
+}: {
+  activeTurnStartedAt: string | null;
+  nowIso: string;
+}) {
+  const [frameIndex, setFrameIndex] = useState(0);
+  const frameIndexRef = useRef(0);
+  const timeoutRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    let cancelled = false;
+    frameIndexRef.current = 0;
+    setFrameIndex(0);
+
+    const scheduleNextFrame = (delayMs: number) => {
+      timeoutRef.current = window.setTimeout(() => {
+        if (cancelled) return;
+        const nextIndex = (frameIndexRef.current + 1) % CLAUDE_SPINNER_FRAMES.length;
+        frameIndexRef.current = nextIndex;
+        setFrameIndex(nextIndex);
+        scheduleNextFrame(
+          CLAUDE_SPINNER_FRAME_DELAYS_MS[nextIndex] ?? CLAUDE_SPINNER_FRAME_DELAYS_MS[0],
+        );
+      }, delayMs);
+    };
+
+    scheduleNextFrame(CLAUDE_SPINNER_FRAME_DELAYS_MS[0]);
+    return () => {
+      cancelled = true;
+      if (timeoutRef.current !== null) {
+        window.clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
+    };
+  }, []);
+
+  const elapsedLabel =
+    activeTurnStartedAt ? formatWorkingTimer(activeTurnStartedAt, nowIso) ?? null : null;
+  const spinnerFrame = CLAUDE_SPINNER_FRAMES[frameIndex] ?? CLAUDE_SPINNER_FRAMES[0];
+  const spinnerOffsetPx =
+    CLAUDE_SPINNER_FRAME_OFFSETS_PX[frameIndex] ?? CLAUDE_SPINNER_FRAME_OFFSETS_PX[0];
+
+  return (
+    <div className="mx-auto mb-1.5 flex w-full min-w-0 max-w-3xl items-center gap-2 px-1 text-[11px] text-muted-foreground/55">
+      <span
+        aria-hidden="true"
+        className="inline-flex h-4 w-4 shrink-0 items-center justify-center text-center font-mono text-[13px] leading-none text-foreground/58"
+        style={{ transform: `translateY(${spinnerOffsetPx}px)` }}
+      >
+        {spinnerFrame}
+      </span>
+      <span className="truncate">
+        Working{elapsedLabel ? ` ${elapsedLabel}` : ""}
+      </span>
+    </div>
+  );
+});
+
 interface MessagesTimelineProps {
   hasMessages: boolean;
   isWorking: boolean;
@@ -4924,8 +5021,7 @@ type TimelineRow =
       id: string;
       createdAt: string;
       proposedPlan: TimelineProposedPlan;
-    }
-  | { kind: "working"; id: string; createdAt: string | null };
+    };
 
 function estimateTimelineProposedPlanHeight(proposedPlan: TimelineProposedPlan): number {
   const estimatedLines = Math.max(1, Math.ceil(proposedPlan.planMarkdown.length / 72));
@@ -5030,17 +5126,8 @@ const MessagesTimeline = memo(function MessagesTimeline({
           completionDividerBeforeEntryId === timelineEntry.id,
       });
     }
-
-    if (isWorking) {
-      nextRows.push({
-        kind: "working",
-        id: "working-indicator-row",
-        createdAt: activeTurnStartedAt,
-      });
-    }
-
     return nextRows;
-  }, [timelineEntries, completionDividerBeforeEntryId, isWorking, activeTurnStartedAt]);
+  }, [timelineEntries, completionDividerBeforeEntryId]);
 
   const firstUnvirtualizedRowIndex = useMemo(() => {
     const firstTailRowIndex = Math.max(rows.length - ALWAYS_UNVIRTUALIZED_TAIL_ROWS, 0);
@@ -5051,7 +5138,6 @@ const MessagesTimeline = memo(function MessagesTimeline({
     let firstCurrentTurnRowIndex = -1;
     if (!Number.isNaN(turnStartedAtMs)) {
       firstCurrentTurnRowIndex = rows.findIndex((row) => {
-        if (row.kind === "working") return true;
         if (!row.createdAt) return false;
         const rowCreatedAtMs = Date.parse(row.createdAt);
         return !Number.isNaN(rowCreatedAtMs) && rowCreatedAtMs >= turnStartedAtMs;
@@ -5095,7 +5181,6 @@ const MessagesTimeline = memo(function MessagesTimeline({
       if (!row) return 96;
       if (row.kind === "work") return 112;
       if (row.kind === "proposed-plan") return estimateTimelineProposedPlanHeight(row.proposedPlan);
-      if (row.kind === "working") return 40;
       return estimateTimelineMessageHeight(row.message, { timelineWidthPx });
     },
     measureElement: measureVirtualElement,
@@ -5244,7 +5329,7 @@ const MessagesTimeline = memo(function MessagesTimeline({
           const canRevertAgentWork = revertTurnCountByUserMessageId.has(row.message.id);
           return (
             <div className="flex justify-end">
-              <div className="group relative max-w-[80%] rounded-2xl rounded-br-sm border border-border bg-secondary px-4 py-3">
+              <div className="group relative w-fit max-w-[min(48%,30rem)] rounded-md rounded-br-sm border border-border/80 bg-card px-3 py-2">
                 {userImages.length > 0 && (
                   <div className="mb-2 grid max-w-[420px] grid-cols-2 gap-2">
                     {userImages.map(
@@ -5283,7 +5368,7 @@ const MessagesTimeline = memo(function MessagesTimeline({
                   </div>
                 )}
                 {row.message.text && (
-                  <pre className="whitespace-pre-wrap wrap-break-word font-mono text-sm leading-relaxed text-foreground">
+                  <pre className="whitespace-pre-wrap break-words font-sans text-[13px] leading-[1.55] text-foreground/94">
                     {row.message.text}
                   </pre>
                 )}
@@ -5295,7 +5380,7 @@ const MessagesTimeline = memo(function MessagesTimeline({
                         type="button"
                         size="xs"
                         variant="outline"
-                        disabled={isRevertingCheckpoint || isWorking}
+                        disabled={isRevertingCheckpoint || activeTurnInProgress}
                         onClick={() => onRevertUserMessage(row.message.id)}
                         title="Revert to this message"
                       >
@@ -5303,7 +5388,7 @@ const MessagesTimeline = memo(function MessagesTimeline({
                       </Button>
                     )}
                   </div>
-                  <p className="text-right text-[10px] text-muted-foreground/30">
+                  <p className="text-right text-[10px] text-muted-foreground/45">
                     {formatTimestamp(row.message.createdAt)}
                   </p>
                 </div>
@@ -5412,22 +5497,6 @@ const MessagesTimeline = memo(function MessagesTimeline({
         </div>
       )}
 
-      {row.kind === "working" && (
-        <div className="py-0.5 pl-1.5">
-          <div className="flex items-center gap-2 pt-1 text-[11px] text-muted-foreground/70">
-            <span className="inline-flex items-center gap-[3px]">
-              <span className="h-1 w-1 rounded-full bg-muted-foreground/30 animate-pulse" />
-              <span className="h-1 w-1 rounded-full bg-muted-foreground/30 animate-pulse [animation-delay:200ms]" />
-              <span className="h-1 w-1 rounded-full bg-muted-foreground/30 animate-pulse [animation-delay:400ms]" />
-            </span>
-            <span>
-              {row.createdAt
-                ? `Working for ${formatWorkingTimer(row.createdAt, nowIso) ?? "0s"}`
-                : "Working..."}
-            </span>
-          </div>
-        </div>
-      )}
     </div>
   );
 

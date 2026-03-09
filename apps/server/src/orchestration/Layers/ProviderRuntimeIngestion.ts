@@ -135,6 +135,21 @@ function runtimeErrorMessageFromEvent(event: ProviderRuntimeEvent): string | und
   return payloadMessage;
 }
 
+function isIgnorableMcpStartupRuntimeError(message: string): boolean {
+  const normalized = message.toLowerCase();
+  if (
+    !normalized.includes("rmcp::transport::worker") ||
+    !normalized.includes("transport channel closed")
+  ) {
+    return false;
+  }
+
+  return (
+    normalized.includes('tokenrefreshfailed("failed to parse server response")') ||
+    normalized.includes('tokenrefreshfailed("server returned error response: invalid_grant')
+  );
+}
+
 function orchestrationSessionStatusFromRuntimeState(
   state: "starting" | "running" | "waiting" | "ready" | "interrupted" | "stopped" | "error",
 ): "starting" | "running" | "ready" | "interrupted" | "stopped" | "error" {
@@ -833,10 +848,17 @@ const make = Effect.gen(function* () {
         event.type === "turn.started" ||
         event.type === "turn.completed"
       ) {
+        const shouldClearActiveTurnForSessionState =
+          event.type === "session.state.changed" &&
+          (event.payload.state === "ready" ||
+            event.payload.state === "stopped" ||
+            event.payload.state === "error");
         const nextActiveTurnId =
           event.type === "turn.started"
             ? (eventTurnId ?? null)
-            : event.type === "turn.completed" || event.type === "session.exited"
+            : event.type === "turn.completed" ||
+                event.type === "session.exited" ||
+                shouldClearActiveTurnForSessionState
               ? null
               : activeTurnId;
         const status = (() => {
@@ -1026,29 +1048,37 @@ const make = Effect.gen(function* () {
 
       if (event.type === "runtime.error") {
         const runtimeErrorMessage = runtimeErrorMessageFromEvent(event) ?? "Provider runtime error";
-
-        const shouldApplyRuntimeError = !STRICT_PROVIDER_LIFECYCLE_GUARD
-          ? true
-          : activeTurnId === null ||
-            eventTurnId === undefined ||
-            sameId(activeTurnId, eventTurnId);
-
-        if (shouldApplyRuntimeError) {
-          yield* orchestrationEngine.dispatch({
-            type: "thread.session.set",
-            commandId: providerCommandId(event, "runtime-error-session-set"),
+        const ignoreRuntimeError = isIgnorableMcpStartupRuntimeError(runtimeErrorMessage);
+        if (ignoreRuntimeError) {
+          yield* Effect.logWarning("ignoring non-fatal MCP startup auth error", {
             threadId: thread.id,
-            session: {
-              threadId: thread.id,
-              status: "error",
-              providerName: event.provider,
-              runtimeMode: thread.session?.runtimeMode ?? "full-access",
-              activeTurnId: eventTurnId ?? null,
-              lastError: runtimeErrorMessage,
-              updatedAt: now,
-            },
-            createdAt: now,
+            provider: event.provider,
+            message: runtimeErrorMessage,
           });
+        } else {
+          const shouldApplyRuntimeError = !STRICT_PROVIDER_LIFECYCLE_GUARD
+            ? true
+            : activeTurnId === null ||
+              eventTurnId === undefined ||
+              sameId(activeTurnId, eventTurnId);
+
+          if (shouldApplyRuntimeError) {
+            yield* orchestrationEngine.dispatch({
+              type: "thread.session.set",
+              commandId: providerCommandId(event, "runtime-error-session-set"),
+              threadId: thread.id,
+              session: {
+                threadId: thread.id,
+                status: "error",
+                providerName: event.provider,
+                runtimeMode: thread.session?.runtimeMode ?? "full-access",
+                activeTurnId: eventTurnId ?? null,
+                lastError: runtimeErrorMessage,
+                updatedAt: now,
+              },
+              createdAt: now,
+            });
+          }
         }
       }
 

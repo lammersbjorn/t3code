@@ -572,6 +572,45 @@ export function hasToolActivityForTurn(
   return activities.some((activity) => activity.turnId === turnId && activity.tone === "tool");
 }
 
+export function hasActiveRuntimeActivityForTurn(
+  activities: ReadonlyArray<OrchestrationThreadActivity>,
+  turnId: TurnId | null | undefined,
+): boolean {
+  if (!turnId) return false;
+
+  let openActivityCount = 0;
+  const ordered = [...activities].toSorted(compareActivitiesByOrder);
+
+  for (const activity of ordered) {
+    if (activity.turnId !== turnId) {
+      continue;
+    }
+
+    switch (activity.kind) {
+      case "tool.started":
+      case "task.started":
+      case "approval.requested":
+      case "user-input.requested":
+        openActivityCount += 1;
+        break;
+      case "tool.updated":
+      case "task.progress":
+        openActivityCount = Math.max(openActivityCount, 1);
+        break;
+      case "tool.completed":
+      case "task.completed":
+      case "approval.resolved":
+      case "user-input.resolved":
+        openActivityCount = Math.max(0, openActivityCount - 1);
+        break;
+      default:
+        break;
+    }
+  }
+
+  return openActivityCount > 0;
+}
+
 export function deriveTimelineEntries(
   messages: ChatMessage[],
   proposedPlans: ProposedPlan[],

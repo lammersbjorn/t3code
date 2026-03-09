@@ -28,7 +28,11 @@ import { newCommandId, newProjectId, newThreadId } from "../lib/utils";
 import { useStore } from "../store";
 import { isChatNewLocalShortcut, isChatNewShortcut, shortcutLabelForCommand } from "../keybindings";
 import { type Thread } from "../types";
-import { derivePendingApprovals } from "../session-logic";
+import {
+  derivePendingApprovals,
+  hasActiveRuntimeActivityForTurn,
+  isLatestTurnSettled,
+} from "../session-logic";
 import { gitRemoveWorktreeMutationOptions, gitStatusQueryOptions } from "../lib/gitReactQuery";
 import { serverConfigQueryOptions } from "../lib/serverReactQuery";
 import { readNativeApi } from "../nativeApi";
@@ -127,11 +131,16 @@ function threadStatusPill(thread: Thread, hasPendingApprovals: boolean): ThreadS
     };
   }
 
-  if (thread.session?.status === "running") {
+  const hasActiveTurn =
+    thread.session !== null &&
+    (!isLatestTurnSettled(thread.latestTurn ?? null, thread.session) ||
+      hasActiveRuntimeActivityForTurn(thread.activities, thread.latestTurn?.turnId));
+
+  if (thread.session?.status === "running" || hasActiveTurn) {
     return {
       label: "Working",
-      colorClass: "text-sky-600 dark:text-sky-300/80",
-      dotClass: "bg-sky-500 dark:bg-sky-300/80",
+      colorClass: "text-orange-600 dark:text-orange-300/90",
+      dotClass: "bg-orange-500 dark:bg-orange-300/90",
       pulse: true,
     };
   }
@@ -989,7 +998,7 @@ export default function Sidebar() {
         <span className="truncate text-sm font-medium tracking-tight text-muted-foreground">
           Code
         </span>
-        <span className="rounded-full bg-muted/50 px-1.5 py-0.5 text-[8px] font-medium uppercase tracking-[0.18em] text-muted-foreground/60">
+        <span className="rounded-md bg-muted/50 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-[0.14em] text-muted-foreground/60">
           {APP_STAGE_LABEL}
         </span>
       </div>
@@ -1000,7 +1009,7 @@ export default function Sidebar() {
     <>
       {isElectron ? (
         <>
-          <SidebarHeader className="drag-region h-[52px] flex-row items-center gap-2 px-4 py-0 pl-[90px]">
+          <SidebarHeader className="drag-region h-12 flex-row items-center gap-2 px-4 py-0 pl-[90px]">
             {wordmark}
             {showDesktopUpdateButton && (
               <Tooltip>
@@ -1011,7 +1020,7 @@ export default function Sidebar() {
                       aria-label={desktopUpdateTooltip}
                       aria-disabled={desktopUpdateButtonDisabled || undefined}
                       disabled={desktopUpdateButtonDisabled}
-                      className={`inline-flex size-7 ml-auto mt-1.5 items-center justify-center rounded-md text-muted-foreground transition-colors ${desktopUpdateButtonInteractivityClasses} ${desktopUpdateButtonClasses}`}
+                      className={`ml-auto mt-1 inline-flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors ${desktopUpdateButtonInteractivityClasses} ${desktopUpdateButtonClasses}`}
                       onClick={handleDesktopUpdateButtonClick}
                     >
                       <RocketIcon className="size-3.5" />
@@ -1041,7 +1050,7 @@ export default function Sidebar() {
                   <button
                     type="button"
                     aria-label="Add project"
-                    className="inline-flex size-5 items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground"
+                    className="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground"
                     onClick={() => {
                       setAddingProject((prev) => !prev);
                       setAddProjectError(null);

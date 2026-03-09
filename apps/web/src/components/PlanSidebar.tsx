@@ -1,4 +1,11 @@
-import { memo, useState, useCallback } from "react";
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { ScrollArea } from "./ui/scroll-area";
@@ -24,6 +31,15 @@ import {
 import { Menu, MenuItem, MenuPopup, MenuTrigger } from "./ui/menu";
 import { readNativeApi } from "~/nativeApi";
 import { toastManager } from "./ui/toast";
+
+const PLAN_SIDEBAR_WIDTH_STORAGE_KEY = "t3code:plan-sidebar-width";
+const PLAN_SIDEBAR_DEFAULT_WIDTH = 340;
+const PLAN_SIDEBAR_MIN_WIDTH = 17 * 16;
+const PLAN_SIDEBAR_MAX_WIDTH = 34 * 16;
+
+function clampPlanSidebarWidth(width: number): number {
+  return Math.max(PLAN_SIDEBAR_MIN_WIDTH, Math.min(Math.round(width), PLAN_SIDEBAR_MAX_WIDTH));
+}
 
 function stepStatusIcon(status: string): React.ReactNode {
   if (status === "completed") {
@@ -65,9 +81,54 @@ const PlanSidebar = memo(function PlanSidebar({
   const [proposedPlanExpanded, setProposedPlanExpanded] = useState(false);
   const [isSavingToWorkspace, setIsSavingToWorkspace] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [sidebarWidth, setSidebarWidth] = useState(PLAN_SIDEBAR_DEFAULT_WIDTH);
+  const resizeStateRef = useRef<{
+    pendingWidth: number;
+    pointerId: number;
+    rail: HTMLButtonElement;
+    rafId: number | null;
+    startWidth: number;
+    startX: number;
+    width: number;
+  } | null>(null);
 
   const planMarkdown = activeProposedPlan?.planMarkdown ?? null;
   const planTitle = planMarkdown ? proposedPlanTitle(planMarkdown) : null;
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const storedWidth = Number(window.localStorage.getItem(PLAN_SIDEBAR_WIDTH_STORAGE_KEY));
+    if (!Number.isFinite(storedWidth)) return;
+    setSidebarWidth(clampPlanSidebarWidth(storedWidth));
+  }, []);
+
+  const stopResize = useCallback((pointerId: number) => {
+    const resizeState = resizeStateRef.current;
+    if (!resizeState) return;
+    if (resizeState.rafId !== null) {
+      window.cancelAnimationFrame(resizeState.rafId);
+    }
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(PLAN_SIDEBAR_WIDTH_STORAGE_KEY, String(resizeState.width));
+    }
+    resizeStateRef.current = null;
+    if (resizeState.rail.hasPointerCapture(pointerId)) {
+      resizeState.rail.releasePointerCapture(pointerId);
+    }
+    document.body.style.removeProperty("cursor");
+    document.body.style.removeProperty("user-select");
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      const resizeState = resizeStateRef.current;
+      if (resizeState && resizeState.rafId !== null) {
+        window.cancelAnimationFrame(resizeState.rafId);
+      }
+      document.body.style.removeProperty("cursor");
+      document.body.style.removeProperty("user-select");
+    };
+  }, []);
 
   const handleCopyPlan = useCallback(() => {
     if (!planMarkdown) return;
@@ -114,8 +175,75 @@ const PlanSidebar = memo(function PlanSidebar({
       );
   }, [planMarkdown, workspaceRoot]);
 
+  const handleResizePointerDown = useCallback(
+    (event: ReactPointerEvent<HTMLButtonElement>) => {
+      if (event.button !== 0) return;
+      const initialWidth = clampPlanSidebarWidth(sidebarWidth);
+      event.preventDefault();
+      event.stopPropagation();
+      resizeStateRef.current = {
+        pendingWidth: initialWidth,
+        pointerId: event.pointerId,
+        rail: event.currentTarget,
+        rafId: null,
+        startWidth: initialWidth,
+        startX: event.clientX,
+        width: initialWidth,
+      };
+      event.currentTarget.setPointerCapture(event.pointerId);
+      document.body.style.cursor = "col-resize";
+      document.body.style.userSelect = "none";
+    },
+    [sidebarWidth],
+  );
+
+  const handleResizePointerMove = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
+    const resizeState = resizeStateRef.current;
+    if (!resizeState || resizeState.pointerId !== event.pointerId) return;
+    event.preventDefault();
+    const delta = resizeState.startX - event.clientX;
+    resizeState.pendingWidth = clampPlanSidebarWidth(resizeState.startWidth + delta);
+    if (resizeState.rafId !== null) return;
+
+    resizeState.rafId = window.requestAnimationFrame(() => {
+      const activeResizeState = resizeStateRef.current;
+      if (!activeResizeState) return;
+      activeResizeState.rafId = null;
+      const nextWidth = activeResizeState.pendingWidth;
+      activeResizeState.width = nextWidth;
+      setSidebarWidth(nextWidth);
+    });
+  }, []);
+
+  const endResizeInteraction = useCallback(
+    (event: ReactPointerEvent<HTMLButtonElement>) => {
+      const resizeState = resizeStateRef.current;
+      if (!resizeState || resizeState.pointerId !== event.pointerId) return;
+      event.preventDefault();
+      stopResize(event.pointerId);
+    },
+    [stopResize],
+  );
+
   return (
-    <div className="flex h-full w-[340px] shrink-0 flex-col border-l border-border/70 bg-card/50">
+    <div
+      className="relative flex h-full shrink-0 flex-col border-l border-border/70 bg-card/50"
+      style={{ width: sidebarWidth }}
+    >
+      <button
+        type="button"
+        aria-label="Resize plan sidebar"
+        title="Drag to resize plan sidebar"
+        className="group absolute inset-y-0 -left-2 z-20 hidden w-4 cursor-col-resize md:flex md:items-stretch"
+        onPointerCancel={endResizeInteraction}
+        onPointerDown={handleResizePointerDown}
+        onPointerMove={handleResizePointerMove}
+        onPointerUp={endResizeInteraction}
+      >
+        <span className="pointer-events-none relative block h-full w-full">
+          <span className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-border/35 transition-colors duration-150 group-hover:bg-border/80" />
+        </span>
+      </button>
       {/* Header */}
       <div className="flex h-12 shrink-0 items-center justify-between border-b border-border/60 px-3">
         <div className="flex items-center gap-2">

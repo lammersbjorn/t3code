@@ -22,7 +22,7 @@ function getSystemDark(): boolean {
 function getStored(): Theme {
   const raw = localStorage.getItem(STORAGE_KEY);
   if (raw === "light" || raw === "dark" || raw === "system") return raw;
-  return "system";
+  return "dark";
 }
 
 function applyTheme(theme: Theme, suppressTransitions = false) {
@@ -31,6 +31,7 @@ function applyTheme(theme: Theme, suppressTransitions = false) {
   }
   const isDark = theme === "dark" || (theme === "system" && getSystemDark());
   document.documentElement.classList.toggle("dark", isDark);
+  document.documentElement.style.colorScheme = isDark ? "dark" : "light";
   if (suppressTransitions) {
     // Force a reflow so the no-transitions class takes effect before removal
     // oxlint-disable-next-line no-unused-expressions

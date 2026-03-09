@@ -183,15 +183,15 @@ function SettingsRouteView() {
     <SidebarInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none bg-background text-foreground isolate">
       <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-background text-foreground">
         {isElectron && (
-          <div className="drag-region flex h-[52px] shrink-0 items-center border-b border-border px-5">
-            <span className="text-xs font-medium tracking-wide text-muted-foreground/70">
+          <div className="drag-region flex h-12 shrink-0 items-center border-b border-border px-5">
+            <span className="text-sm font-medium text-muted-foreground/70">
               Settings
             </span>
           </div>
         )}
 
-        <div className="flex-1 overflow-y-auto p-6">
-          <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
+        <div className="flex-1 overflow-y-auto p-5 sm:p-6">
+          <div className="mx-auto flex w-full max-w-3xl flex-col gap-5">
             <header className="space-y-1">
               <h1 className="text-2xl font-semibold tracking-tight text-foreground">Settings</h1>
               <p className="text-sm text-muted-foreground">
@@ -199,10 +199,10 @@ function SettingsRouteView() {
               </p>
             </header>
 
-            <section className="rounded-2xl border border-border bg-card p-5">
+            <section className="rounded-xl border border-border bg-card p-5">
               <div className="mb-4">
-                <h2 className="text-sm font-medium text-foreground">Appearance</h2>
-                <p className="mt-1 text-xs text-muted-foreground">
+                <h2 className="text-base font-medium text-foreground">Appearance</h2>
+                <p className="mt-1 text-sm text-muted-foreground">
                   Choose how T3 Code handles light and dark mode.
                 </p>
               </div>
@@ -216,7 +216,7 @@ function SettingsRouteView() {
                       type="button"
                       role="radio"
                       aria-checked={selected}
-                      className={`flex w-full items-start justify-between rounded-lg border px-3 py-2 text-left transition-colors ${
+                      className={`flex w-full items-start justify-between gap-3 rounded-lg border px-4 py-3 text-left transition-colors ${
                         selected
                           ? "border-primary/60 bg-primary/8 text-foreground"
                           : "border-border bg-background text-muted-foreground hover:bg-accent"
@@ -228,7 +228,7 @@ function SettingsRouteView() {
                         <span className="text-xs">{option.description}</span>
                       </span>
                       {selected ? (
-                        <span className="rounded bg-primary/14 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-primary">
+                        <span className="rounded-md bg-primary/14 px-2 py-1 text-[11px] font-medium text-primary">
                           Selected
                         </span>
                       ) : null}
@@ -242,10 +242,10 @@ function SettingsRouteView() {
               </p>
             </section>
 
-            <section className="rounded-2xl border border-border bg-card p-5">
+            <section className="rounded-xl border border-border bg-card p-5">
               <div className="mb-4">
-                <h2 className="text-sm font-medium text-foreground">Codex App Server</h2>
-                <p className="mt-1 text-xs text-muted-foreground">
+                <h2 className="text-base font-medium text-foreground">Codex App Server</h2>
+                <p className="mt-1 text-sm text-muted-foreground">
                   These overrides apply to new sessions and let you use a non-default Codex install.
                 </p>
               </div>
@@ -285,7 +285,7 @@ function SettingsRouteView() {
                     <span className="font-medium text-foreground">{codexBinaryPath || "PATH"}</span>
                   </p>
                   <Button
-                    size="xs"
+                    size="sm"
                     variant="outline"
                     onClick={() =>
                       updateSettings({
@@ -300,10 +300,10 @@ function SettingsRouteView() {
               </div>
             </section>
 
-            <section className="rounded-2xl border border-border bg-card p-5">
+            <section className="rounded-xl border border-border bg-card p-5">
               <div className="mb-4">
-                <h2 className="text-sm font-medium text-foreground">Models</h2>
-                <p className="mt-1 text-xs text-muted-foreground">
+                <h2 className="text-base font-medium text-foreground">Models</h2>
+                <p className="mt-1 text-sm text-muted-foreground">
                   Save additional provider model slugs so they appear in the chat model picker and
                   `/model` command suggestions.
                 </p>
@@ -355,7 +355,7 @@ function SettingsRouteView() {
                   return (
                     <div
                       key={provider}
-                      className="rounded-xl border border-border bg-background/50 p-4"
+                      className="rounded-lg border border-border bg-background/50 p-4"
                     >
                       <div className="mb-4">
                         <h3 className="text-sm font-medium text-foreground">
@@ -406,6 +406,7 @@ function SettingsRouteView() {
 
                           <Button
                             className="sm:mt-6"
+                            size="sm"
                             type="button"
                             onClick={() => addCustomModel(provider)}
                           >
@@ -422,7 +423,7 @@ function SettingsRouteView() {
                             <p>Saved custom models: {customModels.length}</p>
                             {customModels.length > 0 ? (
                               <Button
-                                size="xs"
+                                size="sm"
                                 variant="outline"
                                 onClick={() =>
                                   updateSettings(
@@ -454,7 +455,7 @@ function SettingsRouteView() {
                                     </code>
                                   </div>
                                   <Button
-                                    size="xs"
+                                    size="sm"
                                     variant="ghost"
                                     onClick={() => removeCustomModel(provider, slug)}
                                   >
@@ -476,15 +477,15 @@ function SettingsRouteView() {
               </div>
             </section>
 
-            <section className="rounded-2xl border border-border bg-card p-5">
+            <section className="rounded-xl border border-border bg-card p-5">
               <div className="mb-4">
-                <h2 className="text-sm font-medium text-foreground">Responses</h2>
-                <p className="mt-1 text-xs text-muted-foreground">
+                <h2 className="text-base font-medium text-foreground">Responses</h2>
+                <p className="mt-1 text-sm text-muted-foreground">
                   Control how assistant output is rendered during a turn.
                 </p>
               </div>
 
-              <div className="flex items-center justify-between rounded-lg border border-border bg-background px-3 py-2">
+              <div className="flex items-center justify-between rounded-lg border border-border bg-background px-4 py-3">
                 <div>
                   <p className="text-sm font-medium text-foreground">Stream assistant messages</p>
                   <p className="text-xs text-muted-foreground">
@@ -505,7 +506,7 @@ function SettingsRouteView() {
               {settings.enableAssistantStreaming !== defaults.enableAssistantStreaming ? (
                 <div className="mt-3 flex justify-end">
                   <Button
-                    size="xs"
+                    size="sm"
                     variant="outline"
                     onClick={() =>
                       updateSettings({
@@ -519,17 +520,17 @@ function SettingsRouteView() {
               ) : null}
             </section>
 
-            <section className="rounded-2xl border border-border bg-card p-5">
+            <section className="rounded-xl border border-border bg-card p-5">
               <div className="mb-4">
-                <h2 className="text-sm font-medium text-foreground">Keybindings</h2>
-                <p className="mt-1 text-xs text-muted-foreground">
+                <h2 className="text-base font-medium text-foreground">Keybindings</h2>
+                <p className="mt-1 text-sm text-muted-foreground">
                   Open the persisted <code>keybindings.json</code> file to edit advanced bindings
                   directly.
                 </p>
               </div>
 
               <div className="space-y-3">
-                <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-background px-3 py-2">
+                <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-background px-4 py-3">
                   <div className="min-w-0 flex-1">
                     <p className="text-xs font-medium text-foreground">Config file path</p>
                     <p className="mt-1 break-all font-mono text-[11px] text-muted-foreground">
@@ -537,7 +538,7 @@ function SettingsRouteView() {
                     </p>
                   </div>
                   <Button
-                    size="xs"
+                    size="sm"
                     variant="outline"
                     disabled={!keybindingsConfigPath || isOpeningKeybindings}
                     onClick={openKeybindingsFile}
@@ -555,15 +556,15 @@ function SettingsRouteView() {
               </div>
             </section>
 
-            <section className="rounded-2xl border border-border bg-card p-5">
+            <section className="rounded-xl border border-border bg-card p-5">
               <div className="mb-4">
-                <h2 className="text-sm font-medium text-foreground">Safety</h2>
-                <p className="mt-1 text-xs text-muted-foreground">
+                <h2 className="text-base font-medium text-foreground">Safety</h2>
+                <p className="mt-1 text-sm text-muted-foreground">
                   Additional guardrails for destructive local actions.
                 </p>
               </div>
 
-              <div className="flex items-center justify-between rounded-lg border border-border bg-background px-3 py-2">
+              <div className="flex items-center justify-between rounded-lg border border-border bg-background px-4 py-3">
                 <div>
                   <p className="text-sm font-medium text-foreground">Confirm thread deletion</p>
                   <p className="text-xs text-muted-foreground">
@@ -584,7 +585,7 @@ function SettingsRouteView() {
               {settings.confirmThreadDelete !== defaults.confirmThreadDelete ? (
                 <div className="mt-3 flex justify-end">
                   <Button
-                    size="xs"
+                    size="sm"
                     variant="outline"
                     onClick={() =>
                       updateSettings({
