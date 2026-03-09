@@ -145,7 +145,6 @@ import {
   XIcon,
   CopyIcon,
   CheckIcon,
-  ZapIcon,
 } from "lucide-react";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
@@ -205,7 +204,6 @@ import { readNativeApi } from "~/nativeApi";
 import {
   getAppModelOptions,
   resolveAppModelSelection,
-  shouldShowFastTierIcon,
   useAppSettings,
 } from "../appSettings";
 import {
@@ -408,7 +406,6 @@ type ComposerCommandItem =
       model: ModelSlug;
       label: string;
       description: string;
-      showFastBadge: boolean;
     };
 
 type SendPhase = "idle" | "preparing-worktree" | "sending-turn";
@@ -519,9 +516,6 @@ const ComposerCommandMenuItem = memo(function ComposerCommandMenuItem(props: {
         </Badge>
       ) : null}
       <span className="flex min-w-0 items-center gap-1.5 truncate">
-        {props.item.type === "model" && props.item.showFastBadge ? (
-          <ZapIcon className="size-3.5 shrink-0 text-amber-500" />
-        ) : null}
         <span className="truncate">{props.item.label}</span>
       </span>
       <span className="truncate text-muted-foreground/70 text-xs">{props.item.description}</span>
@@ -1250,10 +1244,8 @@ export default function ChatView({ threadId }: ChatViewProps) {
         model: slug,
         label: name,
         description: `${providerLabel} · ${slug}`,
-        showFastBadge:
-          provider === "codex" && shouldShowFastTierIcon(slug, selectedCodexFastModeEnabled),
       }));
-  }, [composerTrigger, searchableModelOptions, selectedCodexFastModeEnabled, workspaceEntries]);
+  }, [composerTrigger, searchableModelOptions, workspaceEntries]);
   const composerMenuOpen = Boolean(composerTrigger);
   const activeComposerMenuItem = useMemo(
     () =>
@@ -3694,7 +3686,6 @@ export default function ChatView({ threadId }: ChatViewProps) {
                     model={selectedModelForPickerWithCustomFallback}
                     lockedProvider={lockedProvider}
                     modelOptionsByProvider={modelOptionsByProvider}
-                    fastModeEnabled={selectedCodexFastModeEnabled}
                     onProviderModelChange={onProviderModelSelect}
                   />
 
@@ -5537,7 +5528,6 @@ const ProviderModelPicker = memo(function ProviderModelPicker(props: {
   model: ModelSlug;
   lockedProvider: ProviderKind | null;
   modelOptionsByProvider: Record<ProviderKind, ReadonlyArray<{ slug: string; name: string }>>;
-  fastModeEnabled: boolean;
   disabled?: boolean;
   onProviderModelChange: (provider: ProviderKind, model: ModelSlug) => void;
 }) {
@@ -5567,12 +5557,9 @@ const ProviderModelPicker = memo(function ProviderModelPicker(props: {
             disabled={props.disabled}
           />
         }
-        >
+      >
         <span className="flex min-w-0 items-center gap-2">
           <ProviderIcon aria-hidden="true" className="size-4 shrink-0 text-muted-foreground/70" />
-          {props.provider === "codex" && shouldShowFastTierIcon(props.model, props.fastModeEnabled) ? (
-            <ZapIcon className="size-3.5 shrink-0 text-amber-500" />
-          ) : null}
           <span className="truncate">{selectedModelLabel}</span>
           <ChevronDownIcon aria-hidden="true" className="size-3 opacity-60" />
         </span>
@@ -5615,10 +5602,6 @@ const ProviderModelPicker = memo(function ProviderModelPicker(props: {
                         value={modelOption.slug}
                         onClick={() => setIsMenuOpen(false)}
                       >
-                        {option.value === "codex" &&
-                        shouldShowFastTierIcon(modelOption.slug, props.fastModeEnabled) ? (
-                          <ZapIcon className="size-3.5 shrink-0 text-amber-500" />
-                        ) : null}
                         {modelOption.name}
                       </MenuRadioItem>
                     ))}
