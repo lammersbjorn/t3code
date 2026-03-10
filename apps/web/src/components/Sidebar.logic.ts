@@ -1,5 +1,9 @@
 import type { Thread } from "../types";
-import { findLatestProposedPlan, isLatestTurnSettled } from "../session-logic";
+import {
+  findLatestProposedPlan,
+  hasActiveRuntimeActivityForTurn,
+  isLatestTurnSettled,
+} from "../session-logic";
 
 export const THREAD_SELECTION_SAFE_SELECTOR = "[data-thread-item], [data-thread-selection-safe]";
 
@@ -19,7 +23,9 @@ export interface ThreadStatusPill {
 type ThreadStatusInput = Pick<
   Thread,
   "interactionMode" | "latestTurn" | "lastVisitedAt" | "proposedPlans" | "session"
->;
+> & {
+  activities?: Thread["activities"];
+};
 
 export function hasUnseenCompletion(thread: ThreadStatusInput): boolean {
   if (!thread.latestTurn?.completedAt) return false;
@@ -62,11 +68,16 @@ export function resolveThreadStatusPill(input: {
     };
   }
 
-  if (thread.session?.status === "running") {
+  const hasActiveTurn =
+    thread.session !== null &&
+    (!isLatestTurnSettled(thread.latestTurn, thread.session) ||
+      hasActiveRuntimeActivityForTurn(thread.activities ?? [], thread.latestTurn?.turnId));
+
+  if (thread.session?.status === "running" || hasActiveTurn) {
     return {
       label: "Working",
-      colorClass: "text-sky-600 dark:text-sky-300/80",
-      dotClass: "bg-sky-500 dark:bg-sky-300/80",
+      colorClass: "text-orange-600 dark:text-orange-300/90",
+      dotClass: "bg-orange-500 dark:bg-orange-300/90",
       pulse: true,
     };
   }
