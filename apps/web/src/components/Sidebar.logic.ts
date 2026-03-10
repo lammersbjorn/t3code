@@ -49,6 +49,7 @@ export function resolveThreadStatusPill(input: {
   hasPendingUserInput: boolean;
 }): ThreadStatusPill | null {
   const { hasPendingApprovals, hasPendingUserInput, thread } = input;
+  const latestTurnSettled = isLatestTurnSettled(thread.latestTurn, thread.session);
 
   if (hasPendingApprovals) {
     return {
@@ -70,7 +71,7 @@ export function resolveThreadStatusPill(input: {
 
   const hasActiveTurn =
     thread.session !== null &&
-    (!isLatestTurnSettled(thread.latestTurn, thread.session) ||
+    (!latestTurnSettled &&
       hasActiveRuntimeActivityForTurn(thread.activities ?? [], thread.latestTurn?.turnId));
 
   if (thread.session?.status === "running" || hasActiveTurn) {
@@ -94,7 +95,7 @@ export function resolveThreadStatusPill(input: {
   const hasPlanReadyPrompt =
     !hasPendingUserInput &&
     thread.interactionMode === "plan" &&
-    isLatestTurnSettled(thread.latestTurn, thread.session) &&
+    latestTurnSettled &&
     findLatestProposedPlan(thread.proposedPlans, thread.latestTurn?.turnId ?? null) !== null;
   if (hasPlanReadyPrompt) {
     return {
